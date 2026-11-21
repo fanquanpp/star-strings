@@ -1,0 +1,296 @@
+/* ==========================================================================
+   FAN-junH-shang — design tokens
+   "crisp radius + liquid glass + instrument mono".
+
+   Drop this in first, then primitives.css. Nothing here depends on a framework.
+
+   Three laws this file encodes:
+     1. ONE accent hue. Decoration comes from type, space and material — never
+        from a second or third colour.
+     2. Radii stay crisp: the scale tops out at 18px. Pills exist only for
+        genuinely circular affordances (switch, dot, avatar, slider thumb).
+     3. Surfaces are glass, not boxes: translucent + blurred + a 1.5px
+        refraction rim + a diagonal sheen. Glass only reads as glass if there
+        is something colourful behind it — that is what the --scene-* block is.
+   ========================================================================== */
+
+:root {
+  /* ---------------------------------------------------------------- type */
+  /* Three bundled variable faces: Sora for display, Manrope for UI, JetBrains
+     Mono for anything the user types or reads as data. Install with
+     `npm i @fontsource-variable/{sora,manrope,jetbrains-mono}` and import each
+     index.css, or load the same files from a CDN. */
+  --font-display: 'Sora Variable', 'Sora', 'Manrope Variable', 'Manrope', var(--font-cjk);
+  --font-ui: 'Manrope Variable', 'Manrope', var(--font-cjk);
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas,
+    monospace;
+  /* CJK stays on the system stack: native rendering, zero download, and every
+     target OS ships a high-quality Chinese face. */
+  --font-cjk: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    'Noto Sans CJK SC', 'Source Han Sans SC', system-ui, sans-serif;
+  --font-jp: 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', 'Noto Sans JP', var(--font-cjk);
+
+  /* The ladder starts at 12px on purpose: in a Chinese-first UI, CJK glyphs
+     below 12px lose their counters on both Windows (YaHei) and macOS. */
+  --text-2xs: 0.75rem; /* 12px — micro labels, the smallest text in the app */
+  --text-xs: 0.8125rem; /* 13px — chips, meta */
+  --text-sm: 0.875rem; /* 14px — dense UI, tables */
+  --text-base: 0.9375rem; /* 15px — body default */
+  --text-md: 1.0625rem; /* 17px — emphasis body */
+  --text-lg: 1.1875rem; /* 19px — card titles */
+  --text-xl: 1.5rem; /* 24px — section titles, sub-page titles */
+  --text-2xl: 2rem; /* 32px — page titles */
+  --text-3xl: clamp(2.125rem, 3.6vw, 3rem);
+  --text-4xl: clamp(2.5rem, 5.2vw, 4.25rem);
+
+  --leading-none: 1;
+  --leading-tight: 1.12;
+  --leading-snug: 1.32;
+  --leading-normal: 1.58;
+  --leading-relaxed: 1.72;
+
+  /* Display type wants tighter tracking; micro labels want wider. Kept shallow
+     on purpose: CJK glyphs sit on a square em, so -0.03em (which flatters a
+     Latin headline) visibly crowds Chinese characters together. */
+  --tracking-tighter: -0.02em;
+  --tracking-tight: -0.012em;
+  --tracking-snug: -0.008em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-wider: 0.09em;
+  --tracking-widest: 0.16em;
+
+  /* --------------------------------------------------------------- space */
+  /* A 4px grid. Only these steps may be used; no arbitrary 13px margins. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s7: 28px;
+  --s8: 32px;
+  --s10: 40px;
+  --s12: 48px;
+  --s16: 64px;
+  --s20: 80px;
+  --s24: 96px;
+
+  /* -------------------------------------------------------------- radius */
+  /* Crisp by design. --r-full exists ONLY for circles. */
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 11px;
+  --r-xl: 14px;
+  --r-2xl: 18px;
+  --r-full: 999px;
+
+  /* -------------------------------------------------------------- motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --ease-swift: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 130ms;
+  --t-base: 220ms;
+  --t-slow: 380ms;
+  --t-slower: 620ms;
+
+  /* -------------------------------------------------------------- layout */
+  --shell-pad: clamp(16px, 3vw, 44px);
+  --header-h: 68px;
+
+  /* ------------------------------------------------------------ identity */
+  /* ONE accent. Every alias resolves to the same hue so legacy names never
+     introduce a second colour into a screen. */
+  --hue-primary: 210; /* desaturated steel blue — focus / caret / selected */
+  --hue-violet: 210;
+  --hue-amber: 210;
+  --hue-rose: 210;
+  --hue-blue: 210;
+}
+
+/* ==========================  DARK  ======================================= */
+
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* --- scene: what the glass refracts. Deliberately colourful, deliberately
+         low-contrast, so panels have something to show without fighting text. */
+  --scene-base: #0c0e12;
+  --scene-1: hsl(218 24% 34% / 0.5);
+  --scene-2: hsl(214 20% 42% / 0.34);
+  --scene-3: hsl(220 22% 30% / 0.4);
+  --scene-4: hsl(216 18% 38% / 0.34);
+  --scene-vignette: rgba(4, 5, 8, 0.78);
+  --scene-grain: 0.03;
+  --scene-amount: 0.5; /* how much colour survives the blend into base */
+  /* Solid colours for canvas/WebGL backdrops. Kept separate from --scene-N
+     because those carry an alpha and THREE.Color cannot parse modern
+     `hsl(h s% l% / a)` — feeding it one silently yields white. */
+  --scene-a: #2c3a52;
+  --scene-b: #3d526e;
+  --scene-c: #24303f;
+  --scene-d: #46586f;
+
+  /* --- glass material --- */
+  --glass-frost: 0.055; /* white overlay alpha inside the glass */
+  --glass-saturation: 1.9;
+  --glass-brightness: 1.06;
+  --glass-blur: 26px;
+  --glass-tint: rgba(11, 13, 22, 0.56);
+  --glass-edge: rgba(255, 255, 255, 0.16);
+  --glass-edge-soft: rgba(255, 255, 255, 0.07);
+  --glass-sheen-a: rgba(255, 255, 255, 0.13);
+  --glass-sheen-b: rgba(255, 255, 255, 0.03);
+  --glass-inner-line: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 18px 48px -22px rgba(0, 0, 0, 0.72), 0 4px 14px -8px rgba(0, 0, 0, 0.5);
+
+  /* --- solids, for text on glass and for opaque chips --- */
+  --bg: #0a0b14;
+  --bg-raised: #12141f;
+  --bg-sunken: #06070d;
+  --surface: rgba(255, 255, 255, 0.038);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --surface-hover: rgba(255, 255, 255, 0.095);
+  --surface-solid: #161926;
+
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.17);
+  --border-faint: rgba(255, 255, 255, 0.05);
+
+  --ink: #f4f6fa;
+  --ink-muted: #b3bac9;
+  --ink-faint: #7d8598;
+  /* The faintest tier still has to be readable: at 4.7:1 on --scene-base it
+     clears AA for the 12px text that uses it. Anything dimmer reads as a
+     smudge, not as a hierarchy. */
+  --ink-ghost: #737c8e;
+
+  --primary: hsl(var(--hue-primary) 34% 68%);
+  --primary-soft: hsl(var(--hue-primary) 34% 68% / 0.14);
+  --primary-ink: #04211e;
+  --violet: hsl(var(--hue-violet) 30% 66%);
+  --violet-soft: hsl(var(--hue-violet) 82% 72% / 0.16);
+  --amber: hsl(var(--hue-amber) 26% 62%);
+  --amber-soft: hsl(var(--hue-amber) 90% 64% / 0.16);
+  --rose: hsl(var(--hue-rose) 30% 64%);
+  --rose-soft: hsl(var(--hue-rose) 84% 68% / 0.16);
+  --blue: hsl(var(--hue-blue) 32% 68%);
+
+  --ok: hsl(210 24% 60%);
+  --ok-soft: hsl(210 24% 60% / 0.14);
+  --warn: hsl(210 30% 62%);
+  --danger: hsl(0 32% 62%);
+  --danger-soft: hsl(0 32% 62% / 0.13);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42);
+  --shadow-md: 0 10px 28px -14px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 32px 68px -30px rgba(0, 0, 0, 0.85);
+  --shadow-glow: 0 0 0 1px var(--border), 0 22px 54px -26px hsl(var(--hue-primary) 80% 42% / 0.55);
+
+  --grid-line: rgba(255, 255, 255, 0.035);
+  --scrim: rgba(5, 6, 12, 0.66);
+
+  /* --- physical keycap stock (see keycap.css) --- */
+  --key-top: #232734;
+  --key-side: #171a24;
+  --key-ink: #eaeef5;
+}
+
+/* ==============================  LIGHT  ================================= */
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --scene-base: #eef0f4;
+  --scene-1: hsl(218 30% 76% / 0.4);
+  --scene-2: hsl(214 26% 82% / 0.34);
+  --scene-3: hsl(220 24% 74% / 0.36);
+  --scene-4: hsl(216 22% 80% / 0.32);
+  --scene-vignette: rgba(255, 255, 255, 0.5);
+  --scene-grain: 0.022;
+  --scene-amount: 0.34;
+  /* Brighter and less saturated than the dark theme: on a light page the
+     backdrop has to stay pale enough that dark text keeps its contrast, so the
+     glass reads as frosted rather than as a coloured pane. */
+  --scene-a: #8ea4c2;
+  --scene-b: #b4c4d8;
+  --scene-c: #9fb0c6;
+  --scene-d: #c3d0e0;
+
+  --glass-frost: 0.5;
+  --glass-saturation: 1.7;
+  --glass-brightness: 1.04;
+  --glass-blur: 24px;
+  --glass-tint: rgba(255, 255, 255, 0.56);
+  --glass-edge: rgba(255, 255, 255, 0.85);
+  --glass-edge-soft: rgba(20, 22, 34, 0.06);
+  --glass-sheen-a: rgba(255, 255, 255, 0.7);
+  --glass-sheen-b: rgba(255, 255, 255, 0.16);
+  --glass-inner-line: rgba(255, 255, 255, 0.9);
+  --glass-shadow: 0 18px 44px -24px rgba(22, 26, 44, 0.28), 0 4px 14px -10px rgba(22, 26, 44, 0.16);
+
+  --bg: #f4f5fb;
+  --bg-raised: #ffffff;
+  --bg-sunken: #eceef7;
+  --surface: rgba(18, 20, 34, 0.035);
+  --surface-strong: rgba(18, 20, 34, 0.06);
+  --surface-hover: rgba(18, 20, 34, 0.085);
+  --surface-solid: #ffffff;
+
+  --border: rgba(18, 20, 34, 0.1);
+  --border-strong: rgba(18, 20, 34, 0.2);
+  --border-faint: rgba(18, 20, 34, 0.055);
+
+  --ink: #12141f;
+  --ink-muted: #454c5f;
+  --ink-faint: #5d6478;
+  --ink-ghost: #6b7387;
+
+  --primary: hsl(var(--hue-primary) 34% 30%);
+  --primary-soft: hsl(var(--hue-primary) 34% 30% / 0.1);
+  --primary-ink: #ffffff;
+  --violet: hsl(var(--hue-violet) 30% 40%);
+  --violet-soft: hsl(var(--hue-violet) 62% 46% / 0.11);
+  --amber: hsl(var(--hue-amber) 26% 38%);
+  --amber-soft: hsl(var(--hue-amber) 84% 40% / 0.13);
+  --rose: hsl(var(--hue-rose) 30% 42%);
+  --rose-soft: hsl(var(--hue-rose) 66% 46% / 0.11);
+  --blue: hsl(var(--hue-blue) 32% 42%);
+
+  --ok: hsl(210 26% 38%);
+  --ok-soft: hsl(210 26% 38% / 0.1);
+  --warn: hsl(210 30% 40%);
+  --danger: hsl(0 34% 46%);
+  --danger-soft: hsl(0 34% 46% / 0.1);
+
+  --shadow-sm: 0 1px 2px rgba(18, 22, 40, 0.07);
+  --shadow-md: 0 12px 30px -18px rgba(18, 22, 40, 0.26);
+  --shadow-lg: 0 34px 70px -34px rgba(18, 22, 40, 0.32);
+  --shadow-glow: 0 0 0 1px var(--border), 0 24px 56px -30px hsl(var(--hue-primary) 70% 38% / 0.36);
+
+  --grid-line: rgba(18, 20, 34, 0.045);
+  --scrim: rgba(240, 242, 250, 0.7);
+
+  --key-top: #ffffff;
+  --key-side: #e5e8f0;
+  --key-ink: #23262e;
+}
+
+/* Accent aliases: a subtree may switch its identity colour without touching
+   components. Because every --hue-* defaults to 210, these all resolve to the
+   same steel blue until someone deliberately re-points them. */
+[data-accent='violet'] {
+  --primary: var(--violet);
+  --primary-soft: var(--violet-soft);
+}
+[data-accent='amber'] {
+  --primary: var(--amber);
+  --primary-soft: var(--amber-soft);
+}
+[data-accent='rose'] {
+  --primary: var(--rose);
+  --primary-soft: var(--rose-soft);
+}

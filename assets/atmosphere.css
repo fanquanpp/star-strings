@@ -1,0 +1,182 @@
+/* ==========================================================================
+   FAN-junH-shang — atmosphere
+   The scene the glass refracts. Without this file the glass is just a grey box.
+
+   LAYER ORDER (fixed, z-index 0 unless noted):
+     0  .scene            fixed, --scene-base fill, pointer-events none
+     1  .scene__mesh      4 radial pools, blur(58px), 34s drift
+     2  .scene__grid      64px lattice, masked to the centre
+     3  .scene__ghost     ambient typographic fragments (see note below)
+     4  .scene__grain     SVG turbulence, opacity <=0.03, overlay
+     5  .scene::after     vignette
+     -  content           z-index 1+, owns its own scroll container
+     -  .viewfinder       fixed z-index 400
+
+   RULE: the scene never moves faster than 34s and never exceeds 3% scale.
+   Atmosphere is felt, not watched. Any animation a user can "catch" is wrong.
+   ========================================================================== */
+
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--scene-base);
+}
+
+/* Four offset radial blooms. Four is the minimum that stops reading as a
+   single gradient, and the maximum that still reads as one field. */
+.scene__mesh {
+  position: absolute;
+  inset: -12%;
+  background:
+    radial-gradient(46% 40% at 16% 14%, var(--scene-1) 0%, transparent 62%),
+    radial-gradient(40% 38% at 84% 22%, var(--scene-2) 0%, transparent 60%),
+    radial-gradient(44% 42% at 68% 86%, var(--scene-3) 0%, transparent 62%),
+    radial-gradient(48% 44% at 24% 78%, var(--scene-4) 0%, transparent 64%);
+  filter: blur(58px) saturate(1.25);
+  animation: scene-drift 34s var(--ease-in-out) infinite alternate;
+}
+
+@keyframes scene-drift {
+  0% {
+    transform: translate3d(-2%, -1.5%, 0) scale(1.02);
+  }
+  50% {
+    transform: translate3d(2.5%, 1.5%, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-1%, 2.5%, 0) scale(1.03);
+  }
+}
+
+/* A very faint technical grid, masked to the centre. This is what turns a
+   gradient into a "stage": it implies measurement, a coordinate system, a
+   machine that was calibrated. Without it the page reads as a hero banner. */
+.scene__grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 78% 66% at 50% 30%, #000 12%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 78% 66% at 50% 30%, #000 12%, transparent 78%);
+  opacity: 0.75;
+}
+
+/* Vignette: the edges recede so the centre keeps its contrast. A directional
+   pool, not a black frame — the falloff is 38%->100%, not a hard edge. */
+.scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 92% 78% at 50% 42%, transparent 38%, var(--scene-vignette) 100%);
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------- grain overlay ---
+   Film grain kills the "flat CSS gradient" tell. Inline SVG turbulence is the
+   cheapest way to get real noise without shipping an image. Keep opacity at or
+   below 0.03 dark / 0.022 light — above that it looks like a filter. */
+
+.scene__grain {
+  position: absolute;
+  inset: 0;
+  opacity: var(--scene-grain, 0.03);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+/* ------------------------------------------------- ambient ghost texture ---
+   Sparse mono characters / numerals / operator pairs / hairlines scattered
+   behind content at 1-3% opacity. This is the cheapest way to make an empty
+   region feel inhabited by machinery — and the easiest thing to overdo.
+
+   BUDGET: 1 fragment per ~180px of viewport width, hard cap 12 visible.
+   Amplitudes: opacity .012-.03, font-size 12-44px, one axis only, floats
+   14-26s. Never place a fragment under a text block's reading line.
+
+   Keep them AXIS-ALIGNED. Rotation or blur turns the field into "cyberpunk
+   texture" instead of "instrument panel". */
+
+.scene__ghost {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  user-select: none;
+}
+
+.scene__ghost span {
+  position: absolute;
+  white-space: pre;
+  opacity: 0.02;
+  animation: ghost-float 20s var(--ease-in-out) infinite alternate;
+}
+
+/* Alternate the direction and the period per fragment so the field never
+   pulses in unison — unison is the tell that reveals it as decoration. */
+.scene__ghost span:nth-child(3n) {
+  animation-duration: 26s;
+  animation-direction: alternate-reverse;
+}
+.scene__ghost span:nth-child(3n + 1) {
+  animation-duration: 14s;
+}
+
+@keyframes ghost-float {
+  from {
+    transform: translate3d(0, -6px, 0);
+    opacity: 0.012;
+  }
+  to {
+    transform: translate3d(0, 6px, 0);
+    opacity: 0.032;
+  }
+}
+
+/* Case frame: an optional 1px panel edge that implies the "stage" is a window
+   onto a larger instrument. Used on one page-level container at most. */
+.case-frame {
+  position: relative;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--r-2xl);
+  background: color-mix(in srgb, var(--glass-tint) 55%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-edge-soft);
+}
+
+/* ---------------------------------------------------------- viewfinder ---
+   Mount <canvas class="viewfinder"> once, at the end of <body>. A full-viewport
+   canvas that draws drafting hairlines through the pointer and locks four
+   right-angle brackets onto the hovered / focus-visible control. Driven by
+   assets/viewfinder.js. It is the single strongest "instrument" cue in the
+   system — a page without it reads as a website rather than a console.
+   Hidden on touch-only devices; hairlines with no pointer are noise. */
+
+.viewfinder {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 400;
+}
+
+@media (hover: none) {
+  .viewfinder {
+    display: none;
+  }
+}
+
+/* ============================  reduced motion  ========================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .scene__mesh,
+  .scene__ghost span {
+    animation: none;
+  }
+}

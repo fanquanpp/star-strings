@@ -1,0 +1,370 @@
+/* ==========================================================================
+   FAN-junH-shang — physical keycap system
+   The crown-jewel material of this art direction: real keyboard hardware
+   rendered as DOM, not as an image.
+
+   WHY IT READS AS PHYSICAL (do not remove any of these four layers):
+     1. A CASE SLAB with a front lip — the plate is a gradient-stacked deck with
+        an inset top highlight and an inset bottom shadow, sitting on two
+        stacked drop shadows. This is what tells the eye "an object rests here".
+     2. A CAP FACE whose vertical gradient goes light -> base -> dark. Real
+        keycaps catch light on the top face and lose it on the skirt.
+     3. A SIDE WALL faked by an opaque, unblurred drop shadow of exactly
+        `capHeight` px. `0 Npx 0 0 darker(cap)` is a solid edge, not a blur —
+        that is the whole trick. A blurred shadow reads as a label; a solid one
+        reads as depth.
+     4. A LEGEND that scales with the cap (`--kb-unit * 0.23`) and is clamped, so
+        a 22px key and a 46px key both get a correctly-sized glyph.
+
+   All colours derive from ONE cap colour via color-mix, so a new board is a
+   one-variable change. Nothing here needs three.js, a canvas, or an image.
+
+   Sizes are in ANSI units: 1u = one standard key. The plate is
+   `aspect-ratio: cols / rows`.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- stage ---
+   `perspective` lives on the stage, `preserve-3d` on the board. A shallow tilt
+   (18-26deg) is the signature: steeper turns the board into a toy. */
+
+.kb-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  perspective: 1400px;
+  perspective-origin: 50% 30%;
+}
+
+/* ---------------------------------------------------------------- board --- */
+/* JS writes --kb-rx / --kb-ry / --kb-scale, and appends ±1.4deg of pointer
+   parallax to rx. Keep the resting tilt shallow. */
+
+.kb-board {
+  --kb-rx: 24deg;
+  --kb-ry: 0deg;
+  --kb-scale: 1;
+  width: min(92%, 880px);
+  transform: rotateX(var(--kb-rx)) rotateY(var(--kb-ry)) scale(var(--kb-scale));
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* ---------------------------------------------------------------- plate --- */
+/* Set --kb-cols / --kb-rows to the layout's unit dimensions. The plate carries
+   the key field's aspect ratio, so keys can be positioned as a % of it. */
+
+.kb-plate {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--kb-cols, 15) / var(--kb-rows, 5);
+  border-radius: 10px;
+  padding: 0.6%;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--kb-deck) 92%, #ffffff 8%) 0%,
+    var(--kb-deck) 18%,
+    color-mix(in srgb, var(--kb-deck) 86%, #000000 14%) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--kb-deck) 70%, #ffffff 30%),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+    0 22px 34px -18px rgba(0, 0, 0, 0.55),
+    0 6px 12px -8px rgba(0, 0, 0, 0.4);
+  transform-style: preserve-3d;
+}
+
+/* ------------------------------------------------------------------ key ---
+   JS positions each key from layout units:
+     left/top     = unit * unitPx
+     width/height = w|h * unitPx
+     --kb-cap-h   = max(3, model.capHeight * unitPx * 0.16)
+   and animates --kb-press (0..1) and --kb-press-shadow (1..0). */
+
+.keycap {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--kb-cap) 90%, #ffffff 10%) 0%,
+    var(--kb-cap) 45%,
+    color-mix(in srgb, var(--kb-cap) 84%, #000000 16%) 100%
+  );
+  box-shadow:
+    /* top face catching light */
+    inset 0 1px 0 color-mix(in srgb, var(--kb-cap) 75%, #ffffff 25%),
+    /* bottom face turning away */
+    inset 0 -1px 1px color-mix(in srgb, var(--kb-cap) 80%, #000000 20%),
+    /* THE SIDE WALL: opaque, capHeight tall, collapses as the key presses */
+    0 calc(var(--kb-cap-h, 4px) * var(--kb-press-shadow, 1)) 0 0
+      color-mix(in srgb, var(--kb-cap) 62%, #000000 38%),
+    /* contact shadow on the plate */
+    0 calc(var(--kb-cap-h, 4px) * var(--kb-press-shadow, 1) + 2px) 6px -2px rgba(0, 0, 0, 0.4);
+  transform: translateZ(0) translateY(calc(var(--kb-press, 0) * var(--kb-cap-h, 4px)));
+  transition: filter 140ms ease;
+  will-change: transform;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.keycap:hover {
+  filter: brightness(1.07);
+}
+
+/* The legend follows the cap, never a fixed px. On a 22px key 9px is too wide
+   for the glyph; on a 46px key it is a smudge. */
+.keycap__legend {
+  font-family: var(--font-mono);
+  font-size: clamp(8px, calc(var(--kb-unit, 40px) * 0.23), 11px);
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--kb-legend) 88%, #ffffff 12%);
+  opacity: 0.95;
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 88%;
+}
+
+/* -------------------------------------------------------------- states --- */
+
+/* "type this next": a soft accent ring, never a rainbow */
+.keycap--next {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--kb-cap) 75%, #ffffff 25%),
+    inset 0 -1px 1px color-mix(in srgb, var(--kb-cap) 80%, #000000 20%),
+    0 calc(var(--kb-cap-h, 4px) * var(--kb-press-shadow, 1)) 0 0
+      color-mix(in srgb, var(--kb-cap) 62%, #000000 38%),
+    0 0 0 2px var(--primary),
+    0 0 14px -2px var(--primary);
+}
+
+/* "you typed the wrong key": tint toward danger, keep the white legend */
+.keycap--flash {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--danger) 55%, var(--kb-cap)) 0%,
+    color-mix(in srgb, var(--danger) 70%, #000000) 100%
+  );
+  color: #ffffff;
+}
+
+/* Heat map: a single accent hue at varying strength. Even a "coloured" data
+   state stays inside the palette — never a blue->red rainbow. */
+.kb-stage[data-heat='true'] .keycap {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(
+        in srgb,
+        var(--danger) calc(var(--kb-heat, 0) * 55%),
+        color-mix(in srgb, var(--kb-cap) 90%, #ffffff 10%)
+      )
+      0%,
+    color-mix(in srgb, var(--danger) calc(var(--kb-heat, 0) * 70%), var(--kb-cap)) 100%
+  );
+}
+
+/* ------------------------------------------------------------- profiles ---
+   Same maths, different physical family. A chiclet board has almost no side
+   wall and a 3px radius; a Cherry board has a tall wall and a 5px radius. */
+
+.kb-stage[data-profile='chiclet'] .keycap {
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--kb-cap) 80%, #ffffff 20%),
+    0 calc(var(--kb-cap-h, 4px) * 0.6 * var(--kb-press-shadow, 1)) 0 0
+      color-mix(in srgb, var(--kb-cap) 70%, #000000 30%);
+}
+.kb-stage[data-profile='lowprofile'] .keycap {
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   HERO KEYCAP — the same material used as a single display object.
+   This is the move that makes a screen feel like it contains hardware: one
+   oversized physical artifact, tilted, with a real contact shadow, floating in
+   the scene. Use it INSTEAD of a stock illustration or an icon hero.
+   ========================================================================== */
+
+.keycap-hero {
+  --kb-cap: #f0f1f4;
+  --kb-legend: #3c4048;
+  --kb-deck: #b9bcc3;
+  --cap-size: clamp(96px, 16vw, 168px);
+  --cap-h: calc(var(--cap-size) * 0.14);
+  position: relative;
+  width: calc(var(--cap-size) * 1.9);
+  aspect-ratio: 1.9 / 1;
+  border-radius: calc(var(--cap-size) * 0.06);
+  display: grid;
+  place-items: center;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--kb-cap) 92%, #ffffff 8%) 0%,
+    var(--kb-cap) 48%,
+    color-mix(in srgb, var(--kb-cap) 84%, #000000 16%) 100%
+  );
+  box-shadow:
+    inset 0 2px 0 color-mix(in srgb, var(--kb-cap) 72%, #ffffff 28%),
+    inset 0 -2px 2px color-mix(in srgb, var(--kb-cap) 78%, #000000 22%),
+    0 var(--cap-h) 0 0 color-mix(in srgb, var(--kb-cap) 58%, #000000 42%),
+    0 calc(var(--cap-h) + 14px) 28px -10px rgba(0, 0, 0, 0.55);
+  transform: rotateX(18deg) rotateZ(-4deg);
+  transform-style: preserve-3d;
+  transform-origin: 50% 100%;
+}
+
+.keycap-hero__legend {
+  font-family: var(--font-mono);
+  font-size: calc(var(--cap-size) * 0.24);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--kb-legend) 90%, #ffffff 10%);
+  user-select: none;
+}
+
+/* Optional: a secondary, ghosted cap behind the hero one, at lower opacity, to
+   suggest a field of hardware without rendering a whole board. */
+.keycap-hero--ghost {
+  filter: saturate(0.4) brightness(0.7);
+  opacity: 0.4;
+  transform: rotateX(18deg) rotateZ(-4deg) translate3d(38%, 18%, -80px);
+}
+
+/* ==========================================================================
+   KNOB — the same physics applied to a round object. A radial highlight at
+   50%/18%, a radial shadow at 50%/120%, the same zero-blur Y wall, and a
+   printed scale that never rotates with the cap.
+   ========================================================================== */
+
+.knob {
+  position: relative;
+  width: 176px;
+  height: 176px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.knob::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%, var(--bg-sunken) 58%, transparent 59%);
+  box-shadow: inset 0 0 0 1px var(--border-faint), inset 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.knob__ticks {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.knob__ticks i {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 6px;
+  margin-left: -0.5px;
+  background: var(--border-strong);
+  transform-origin: 50% 88px;
+}
+.knob__ticks i:nth-child(5n + 1) {
+  height: 11px;
+  background: var(--ink-faint);
+}
+.knob__cap {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 16%, color-mix(in srgb, var(--key-top) 78%, #ffffff 22%) 0%, transparent 60%),
+    radial-gradient(circle at 50% 122%, color-mix(in srgb, var(--key-side) 68%, #000000 32%) 0%, transparent 64%),
+    linear-gradient(180deg, var(--key-top) 0%, var(--key-side) 100%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--key-top) 70%, #ffffff 30%),
+    inset 0 -2px 3px color-mix(in srgb, var(--key-side) 74%, #000000 26%),
+    0 7px 0 0 color-mix(in srgb, var(--key-side) 60%, #000000 40%),
+    0 16px 24px -8px rgba(0, 0, 0, 0.65);
+  display: grid;
+  place-items: center;
+  transition: transform 140ms var(--ease-out);
+}
+.knob__cap::before {
+  content: '';
+  position: absolute;
+  inset: 15px;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--key-top) 80%, #ffffff 20%),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  opacity: 0.7;
+}
+.knob__cap::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: 3px;
+  height: 24px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--primary);
+  box-shadow: 0 0 10px -1px var(--primary);
+}
+.knob__readout {
+  position: absolute;
+  bottom: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.knob__readout b {
+  color: var(--ink);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------ parallax script ---
+   Minimum viable JS for the pointer tilt. Drop in when interactivity is
+   wanted; omit it entirely and the board stays at its resting angle.
+
+   const stage = document.querySelector('.kb-stage');
+   const board = stage.querySelector('.kb-board');
+   let tx = 0, ty = 0, px = 0, py = 0;
+   stage.addEventListener('pointermove', (e) => {
+     const r = stage.getBoundingClientRect();
+     tx = ((e.clientX - r.left) / r.width  - 0.5) * 2;
+     ty = ((e.clientY - r.top ) / r.height - 0.5) * 2;
+   });
+   stage.addEventListener('pointerleave', () => { tx = 0; ty = 0; });
+   (function tick() {
+     px += (tx - px) * 0.12;           // exponential follow, ~0.18s time constant
+     py += (ty - py) * 0.12;
+     board.style.setProperty('--kb-rx', `${24 + py * 0.9}deg`);
+     board.style.setProperty('--kb-ry', `${px * 1.4}deg`);
+     requestAnimationFrame(tick);
+   })();
+   --------------------------------------------------------------------------
+   Press: set --kb-press 0->1 (rise) and --kb-press-shadow 1->0. Use an
+   asymmetric spring — 14/s down, 9/s up — so the key snaps but returns slowly.
+   The cap travels 42% of the wall while the wall collapses 100%: that
+   over-collapse is why it feels like it sinks into a socket.
+   Never animate with React state; write the custom property directly.
+   ------------------------------------------------------------------------ */

@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c0e12">
+<title>星弦 · 自由演奏面板</title>
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/sora@5/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/manrope@5/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/jetbrains-mono@5/index.css">
+
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/primitives.css">
+<link rel="stylesheet" href="assets/atmosphere.css">
+<link rel="stylesheet" href="assets/keycap.css">
+
+<style>
+  /* ==================================================================
+     星弦 — 单屏乐器控制台（无滚动、纯 2D）。
+     系统本体在 assets/*.css；这里只做本页构图：
+       顶栏 = 运输条（识别 + 读数 + 唯一主操作）
+       主体 = 左：2D 键帽音板（玻璃展柜）/ 右：设置柱（A5 工作台）
+     键帽的侧墙是纯 2D 盒阴影（零模糊实边），不使用任何 3D 变换。
+     ================================================================== */
+
+  html, body { height: 100%; overflow: hidden; }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    height: 100dvh;
+    max-width: 1360px;
+    margin-inline: auto;
+    padding: var(--s5) var(--shell-pad);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s5);
+  }
+
+  /* ------------------------------------------------------ 顶栏 运输条 */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: var(--s6);
+    padding: var(--s3) var(--s5);
+    flex-wrap: wrap;
+  }
+  .topbar__id { display: flex; flex-direction: column; gap: 2px; margin-right: var(--s4); }
+  .topbar__title {
+    font-size: var(--text-xl);
+    letter-spacing: var(--tracking-tighter);
+    line-height: 1.06;
+  }
+  .topbar .stat { gap: 2px; }
+
+  /* ------------------------------------------------ 主体：音板 + 设置柱 */
+  .main {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+    gap: var(--s5);
+  }
+
+  /* 展柜：玻璃面板，内部居中一块 2D 音板。宽度同时受面板宽与高约束。 */
+  .vitrine {
+    container-type: size;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--s6);
+    padding: var(--s5) var(--s6);
+    min-height: 0;
+  }
+
+  /* ------------------------------------------------- 跟弹谱条（简谱→键位） */
+  .follow { display: flex; flex-direction: column; gap: var(--s2); width: 100%; }
+  .follow[hidden] { display: none; }
+  .follow__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); }
+  .follow__count {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wide);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .follow__lane-wrap {
+    position: relative;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%);
+  }
+  .follow__lane {
+    display: flex;
+    gap: var(--s2);
+    width: max-content;
+    transform: translateX(0);
+    transition: transform var(--t-slow) var(--ease-out);
+    will-change: transform;
+  }
+  .fchip {
+    position: relative;
+    flex: none;
+    width: 46px;
+    height: 54px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    border: 1px solid var(--border-faint);
+    font-family: var(--font-mono);
+    user-select: none;
+    transition: opacity var(--t-base) var(--ease-out), background var(--t-fast) var(--ease-out),
+      border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+  }
+  .fchip__num { font-size: var(--text-lg); font-weight: 700; line-height: 1; color: var(--ink-muted); }
+  .fchip__key {
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wide);
+    color: var(--ink-faint);
+  }
+  .fchip__oct {
+    position: absolute;
+    left: 50%;
+    margin-left: -2px;
+    width: 4px;
+    height: 4px;
+    border-radius: var(--r-full);
+    background: var(--ink-faint);
+  }
+  .fchip__oct--hi { top: 3px; }   /* 高音：数上加点 */
+  .fchip__oct--lo { bottom: 3px; } /* 低音：数下加点 */
+  .fchip.is-done { opacity: 0.28; }
+  .fchip.is-nxt { opacity: 0.75; }
+  .fchip.is-cur {
+    background: var(--surface-strong);
+    border-color: transparent;
+    box-shadow: 0 0 0 2px var(--primary), 0 0 14px -2px var(--primary);
+  }
+  .fchip.is-cur .fchip__num { color: var(--ink); }
+  .fchip.is-cur .fchip__key { color: var(--primary); }
+  .fchip.is-miss { background: var(--danger-soft); }
+  .fchip.is-miss .fchip__num { color: var(--danger); }
+  .kb-stage {
+    width: min(92cqw, calc(80cqh * 2.4429));
+    height: auto;
+    min-height: 0;
+    perspective: none;
+    perspective-origin: 50% 50%;
+    overflow: visible;
+    display: block;
+    touch-action: none;
+  }
+  .kb-board {
+    width: 100%;
+    margin: 0;
+    transform: none;
+    will-change: auto;
+  }
+  .kb-plate {
+    --kb-deck: #1a1e2b;
+    --kb-cols: 8.55;
+    --kb-rows: 3.5;
+    padding: 0;
+  }
+  .keycap {
+    --kb-cap: var(--key-top);
+    --kb-legend: var(--key-ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--kb-unit, 100px) * 0.045);
+  }
+  .keycap.is-on { filter: brightness(1.18); }
+  .keycap.is-on::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 7px;
+    pointer-events: none;
+    box-shadow: 0 0 0 2px var(--primary), 0 0 18px -2px var(--primary);
+  }
+  .cap-solfa {
+    font-family: var(--font-mono);
+    font-weight: 650;
+    font-size: clamp(12px, calc(var(--kb-unit, 100px) * 0.23), 26px);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--kb-legend);
+    pointer-events: none;
+    user-select: none;
+  }
+  .cap-note {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: clamp(12px, calc(var(--kb-unit, 100px) * 0.125), 14px);
+    line-height: 1;
+    color: color-mix(in srgb, var(--kb-legend) 62%, transparent);
+    pointer-events: none;
+    user-select: none;
+  }
+  /* 丝印在板体上的音区标签 */
+  .plate-label {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: clamp(12px, calc(var(--kb-unit, 100px) * 0.15), 15px);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wide);
+    color: color-mix(in srgb, var(--key-ink) 52%, transparent);
+    user-select: none;
+    pointer-events: none;
+  }
+  @container (max-width: 560px) {
+    .cap-note { display: none; }
+    .plate-label { font-size: 12px; letter-spacing: 0; white-space: nowrap; }
+  }
+
+  /* ---------------------------------------------------------- 设置柱 */
+  .aside {
+    display: flex;
+    flex-direction: column;
+    padding: var(--s4) var(--s5);
+    min-height: 0;
+  }
+  .aside__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding-block: var(--s1) var(--s3);
+  }
+  .form-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+    padding-block: var(--s3);
+    border-bottom: 1px solid var(--border-faint);
+  }
+  .form-row__label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+  .form-row__label strong { font-size: var(--text-sm); font-weight: 600; }
+  .form-row__label span { font-size: var(--text-xs); color: var(--ink-faint); line-height: 1.45; max-width: 30ch; }
+  .form-row__control {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+  }
+  .echo {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wide);
+    color: var(--ink-faint);
+    min-width: 3.5em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .setup input[type='range'] { width: 120px; }
+  .aside__foot {
+    margin-top: auto;
+    padding-top: var(--s3);
+    border-top: 1px solid var(--border-faint);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    letter-spacing: var(--tracking-wide);
+    color: var(--ink-ghost);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* ----------------------------------------------------- 响应式（仍不滚动） */
+  @media (max-width: 900px) {
+    .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+    .topbar { gap: var(--s4); }
+    .aside { padding: var(--s2) var(--s4); }
+    .aside__head { padding-block: var(--s2); }
+    .aside__rows { display: block; }
+    .aside__foot { display: none; }
+    .form-row__label span { display: none; }
+    .setup input[type='range'] { width: 90px; }
+  }
+  @media (max-height: 640px) {
+    .app { gap: var(--s3); padding-block: var(--s3); }
+    .topbar { padding: var(--s2) var(--s4); }
+    .form-row { padding-block: var(--s2); }
+    .aside__foot { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="scene" aria-hidden="true">
+  <div class="scene__mesh"></div>
+  <div class="scene__grid"></div>
+  <div class="scene__ghost">
+    <span style="left: 3%; top: 30%; font-size: 22px">C4 = 261.63 Hz</span>
+    <span style="left: 86%; top: 10%; font-size: 24px">0 2 4 5 7 9 11</span>
+    <span style="left: 34%; top: 90%; font-size: 16px">do re mi fa sol la si</span>
+    <span style="left: 78%; top: 90%; font-size: 14px">KS · 0.996</span>
+    <span style="left: 58%; top: 6%; font-size: 12px">A4 · 440</span>
+  </div>
+  <div class="scene__grain"></div>
+</div>
+
+<canvas class="viewfinder" aria-hidden="true"></canvas>
+
+<main class="shell app">
+  <header class="topbar glass">
+    <div class="topbar__id">
+      <span class="eyebrow">Instrument · 自由演奏</span>
+      <h1 class="topbar__title">星弦</h1>
+    </div>
+    <div class="stat">
+      <span class="stat-label">调性 Key</span>
+      <span class="stat-value">C 大调</span>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="glass vitrine">
+      <div class="follow" id="followStrip" hidden>
+        <div class="follow__head">
+          <span class="eyebrow" id="followTitle">跟弹 · —</span>
+          <span class="follow__count" id="followCount">0 / 0</span>
+        </div>
+        <div class="follow__lane-wrap">
+          <div class="follow__lane" id="followLane" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="kb-stage" id="stage">
+        <div class="kb-board" id="board">
+          <div class="kb-plate" id="plate"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="glass aside">
+      <div class="aside__head">
+        <span class="eyebrow">Setup · 音色与效果</span>
+        <span class="eyebrow" style="color: var(--ink-ghost)">3 × 7 · 21 音</span>
+      </div>
+      <div class="aside__rows">
+        <div class="form-row">
+          <div class="form-row__label">
+            <strong>跟弹练习</strong>
+            <span>选中曲目，按谱条提示逐键弹对即可推进。</span>
+          </div>
+          <div class="form-row__control">
+            <div class="pills" id="followPick" role="group" aria-label="跟弹曲目">
+              <button class="pill" type="button" data-song="" data-active="true">自由</button>
+              <button class="pill" type="button" data-song="twinkle">小星星</button>
+              <button class="pill" type="button" data-song="singon">为你唱下去</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-row__label">
+            <strong>音色</strong>
+            <span>拨弦如竖琴，八音盒更清脆。</span>
+          </div>
+          <div class="form-row__control">
+            <span class="echo" id="timbreEcho">竖琴</span>
+            <div class="segmented" id="timbreSeg" role="radiogroup" aria-label="音色">
+              <button type="button" role="radio" aria-checked="true" data-value="lyre" data-active="true">竖琴</button>
+              <button type="button" role="radio" aria-checked="false" data-value="box">八音盒</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-row__label">
+            <strong>混响</strong>
+            <span>给声音加上音乐厅的空间感。</span>
+          </div>
+          <div class="form-row__control">
+            <span class="echo" id="echoReverb">开</span>
+            <button class="switch" id="swReverb" role="switch" aria-checked="true" data-on="true" aria-label="混响" type="button"></button>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-row__label">
+            <strong>音量</strong>
+            <span>只影响这一页的输出。</span>
+          </div>
+          <div class="form-row__control">
+            <span class="echo" id="volEcho">80%</span>
+            <input type="range" id="vol" min="0" max="100" value="80" role="slider" aria-label="音量" aria-valuemin="0" aria-valuemax="100" aria-valuenow="80">
+          </div>
+        </div>
+      </div>
+      <div class="aside__foot">
+        <span>QWERTYU = 高音 · ASDFGHJ = 中音 · ZXCVBNM = 低音</span>
+        <span>按住滑动可滑奏，支持多点触控。</span>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script src="assets/viewfinder.js"></script>
+<script>
+'use strict';
+
+/* ================= 基础数据 ================= */
+const SEMI   = [0, 2, 4, 5, 7, 9, 11];
+const SOLFA  = ['do', 're', 'mi', 'fa', 'sol', 'la', 'si'];
+const LETTER = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+const C4 = 261.6255653;
+
+// 行定义：视觉从上到下 = 高音 / 中音 / 低音
+const ROWS = [
+  { name: '高音区', oct: 5, keys: 'QWERTYU', g: 0.42 },
+  { name: '中音区', oct: 4, keys: 'ASDFGHJ', g: 0.50 },
+  { name: '低音区', oct: 3, keys: 'ZXCVBNM', g: 0.58 }
+];
+
+const settings = { timbre: 'lyre', reverb: true, vol: 0.8 };
+const REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function freqOf(row, col) {
+  return C4 * Math.pow(2, ROWS[row].oct - 4) * Math.pow(2, SEMI[col] / 12);
+}
+function pitchName(row, col) { return LETTER[col] + ROWS[row].oct; }
+
+/* ================= 预设谱（数字简谱 → 键位提示） =================
+   谱面记作 [八度, 度数]：-1 = 低音区（数下加点）、0 = 中音区、1 = 高音区（数上加点）；
+   度数 1–7 对应 do–si 七列。《为了你唱下去》原谱 1=G，此处移调至 C 以匹配琴键，节奏为简化选段。 */
+const SONGS = {
+  twinkle: {
+    name: '小星星',
+    seq: [
+      [0,1],[0,1],[0,5],[0,5],[0,6],[0,6],[0,5],
+      [0,4],[0,4],[0,3],[0,3],[0,2],[0,2],[0,1],
+      [0,5],[0,5],[0,4],[0,4],[0,3],[0,3],[0,2],
+      [0,5],[0,5],[0,4],[0,4],[0,3],[0,3],[0,2],
+      [0,1],[0,1],[0,5],[0,5],[0,6],[0,6],[0,5],
+      [0,4],[0,4],[0,3],[0,3],[0,2],[0,2],[0,1]
+    ]
+  },
+  singon: {
+    name: '为了你唱下去 · 选段',
+    seq: [
+      [-1,5],[0,3],[0,2],[0,1],[-1,7],[0,1],
+      [-1,5],[0,3],[0,2],[0,1],[-1,7],[0,1],
+      [0,1],[-1,7],[-1,6],[-1,5],[-1,5],
+      [0,1],[0,1],[0,2],[0,1],[0,7],[0,6],[0,5],[0,1],[0,6],[0,5],[0,5],[0,1],[0,3],[0,4],[0,5],[0,5],
+      [0,1],[0,1],[0,2],[0,1],[0,7],[0,6],[0,6],[0,6],[0,5],[0,6],[0,5],[0,6],[0,1],[0,2],
+      [0,1],[0,1],[0,2],[0,1],[0,7],[0,6],[0,6],[0,5],[0,6],[0,7],[0,1],[0,2],
+      [0,1],[0,7],[0,1],[0,3],[0,5],[0,4],[0,4],[0,3],[0,2],[0,1],[0,2],[0,1],[0,1],
+      [0,1],[0,7],[0,1],[0,3],[0,4],[0,4],[0,4],[0,3],[0,2],[0,1],[0,2],[0,5],[0,3],[0,2],
+      [-1,5],[0,3],[0,2],[0,1],[-1,7],[0,1]
+    ]
+  }
+};
+
+/* ================= 构建 2D 键帽音板 ================= */
+const plate = document.getElementById('plate');
+const stage = document.getElementById('stage');
+const keyEls = [];
+
+ROWS.forEach((r, ri) => {
+  keyEls.push([]);
+  for (let c = 0; c < 7; c++) {
+    const k = document.createElement('div');
+    k.className = 'keycap';
+    k.dataset.row = ri;
+    k.dataset.col = c;
+    k.setAttribute('aria-label', SOLFA[c] + ' ' + pitchName(ri, c) + ' · 键 ' + r.keys[c]);
+    k.innerHTML =
+      '<span class="cap-solfa">' + SOLFA[c] + '</span>' +
+      '<span class="cap-note">' + pitchName(ri, c) + '</span>';
+    plate.appendChild(k);
+    keyEls[ri].push(k);
+  }
+});
+
+const rowLabels = ROWS.map(r => {
+  const el = document.createElement('div');
+  el.className = 'plate-label';
+  el.textContent = r.name;
+  plate.appendChild(el);
+  return el;
+});
+
+// 板面几何：0.25u 边距 + 1.05u 音区标签槽 + 7×1u 键格，两侧再留 0.25u。
+// 键帽占格 78%，格内居中——格与格之间的余量就是键距。
+const UNITS_W = 8.55, GUT = 1.05, MARGIN = 0.25, CAP = 0.78;
+
+function layoutBoard() {
+  const w = plate.offsetWidth;
+  if (!w) return;
+  const unit = w / UNITS_W;
+  const cap = CAP * unit;
+  const inset = (unit - cap) / 2;
+  plate.style.setProperty('--kb-unit', unit.toFixed(2) + 'px');
+  for (let ri = 0; ri < 3; ri++) {
+    for (let c = 0; c < 7; c++) {
+      const el = keyEls[ri][c];
+      el.style.left = ((MARGIN + GUT + c) * unit + inset).toFixed(2) + 'px';
+      el.style.top = ((MARGIN + ri) * unit + inset).toFixed(2) + 'px';
+      el.style.width = cap.toFixed(2) + 'px';
+      el.style.height = cap.toFixed(2) + 'px';
+      el.style.setProperty('--kb-cap-h', Math.max(3, cap * 0.095).toFixed(2) + 'px');
+    }
+  }
+  rowLabels.forEach((el, i) => {
+    el.style.left = (MARGIN * unit).toFixed(2) + 'px';
+    el.style.top = ((MARGIN + i) * unit + inset).toFixed(2) + 'px';
+    el.style.width = (GUT * unit).toFixed(2) + 'px';
+    el.style.height = cap.toFixed(2) + 'px';
+  });
+}
+new ResizeObserver(layoutBoard).observe(plate);
+
+/* ================= 按压物理（非对称弹簧，rAF 静止即停） ================= */
+const pressStates = new Map();
+let pressRaf = 0, pressLast = 0;
+
+function setPress(el, p) {
+  el.style.setProperty('--kb-press', (p * 0.42).toFixed(4));
+  el.style.setProperty('--kb-press-shadow', (1 - p).toFixed(4));
+}
+function pressTick(now) {
+  pressRaf = 0;
+  const dt = Math.min(0.05, Math.max(0.001, (now - pressLast) / 1000));
+  pressLast = now;
+  const settled = [];
+  pressStates.forEach((s, el) => {
+    const speed = s.target === 1 ? 14 : 9; // 快速下按，缓慢回弹
+    s.val += (s.target - s.val) * Math.min(1, speed * dt);
+    if (Math.abs(s.target - s.val) < 0.01) { s.val = s.target; settled.push(el); }
+    setPress(el, s.val);
+  });
+  settled.forEach(el => pressStates.delete(el));
+  if (pressStates.size) pressRaf = requestAnimationFrame(pressTick);
+}
+function pressWake() {
+  if (!pressRaf && pressStates.size) {
+    pressLast = performance.now();
+    pressRaf = requestAnimationFrame(pressTick);
+  }
+}
+function notePress(el, silent) {
+  if (!silent) {
+    const ri = +el.dataset.row, ci = +el.dataset.col;
+    noteRC(ri, ci, 0, 1);
+    followCheck(ri, ci);
+  }
+  el.classList.add('is-on');
+  if (REDUCE) { setPress(el, 1); pressStates.delete(el); return; }
+  const s = pressStates.get(el) || { val: 0 };
+  s.target = 1;
+  pressStates.set(el, s);
+  pressWake();
+}
+function noteRelease(el) {
+  el.classList.remove('is-on');
+  if (REDUCE) { setPress(el, 0); pressStates.delete(el); return; }
+  const s = pressStates.get(el) || { val: 1 };
+  s.target = 0;
+  pressStates.set(el, s);
+  pressWake();
+}
+
+/* ================= 音频引擎（与美术无关，保持不变） ================= */
+let ctx = null, busDry, send, comp, masterGain;
+const bufCache = new Map();
+
+function ensureAudio() {
+  if (!ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    try { ctx = new AC({ latencyHint: 'interactive' }); }
+    catch (_) { ctx = new AC(); }
+
+    busDry = ctx.createGain();
+    busDry.gain.value = 0.9;
+
+    comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 20;
+    comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.25;
+
+    masterGain = ctx.createGain();
+    masterGain.gain.value = settings.vol;
+
+    send = ctx.createGain();
+    send.gain.value = settings.reverb ? 0.32 : 0;
+    const conv = ctx.createConvolver();
+    conv.buffer = makeIR(2.6);
+    const wet = ctx.createGain();
+    wet.gain.value = 0.5;
+    send.connect(conv); conv.connect(wet);
+
+    busDry.connect(comp);
+    wet.connect(comp);
+    comp.connect(masterGain);
+    masterGain.connect(ctx.destination);
+  }
+  if (ctx.state === 'suspended') ctx.resume();
+}
+
+function makeIR(sec) {
+  const sr = ctx.sampleRate, len = Math.floor(sr * sec);
+  const ir = ctx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    const pre = Math.floor(sr * 0.02);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const n = Math.random() * 2 - 1;
+      lp = lp * 0.7 + n * 0.3;
+      d[i] = i < pre ? 0 : lp * Math.exp(-3.2 * i / len) * 0.6;
+    }
+    const f = Math.floor(sr * 0.05);
+    for (let i = len - f; i < len; i++) d[i] *= (len - i) / f;
+  }
+  return ir;
+}
+
+function getBuf(kind, freq) {
+  const key = kind + '|' + Math.round(freq * 10);
+  if (bufCache.has(key)) return bufCache.get(key);
+  const buf = kind === 'box' ? renderBox(freq) : renderKS(freq);
+  bufCache.set(key, buf);
+  return buf;
+}
+
+// Karplus-Strong 拨弦：噪声激励 + 环形延迟线 + 平均低通
+function renderKS(freq) {
+  const sr = ctx.sampleRate;
+  const N = Math.max(2, Math.round(sr / freq));
+  const decay = freq < 200 ? 3.6 : (freq < 500 ? 2.8 : 2.2);
+  const damp = Math.min(0.9996, Math.pow(0.004, 1 / (decay * freq)));
+  const len = Math.floor(sr * (decay + 0.5));
+  const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+  const ring = new Float32Array(N);
+
+  let prev = 0;
+  for (let i = 0; i < N; i++) { const n = Math.random() * 2 - 1; prev = (prev + n) * 0.5; ring[i] = prev; }
+  for (let p = 0; p < 2; p++) {
+    let a = ring[N - 1];
+    for (let i = 0; i < N; i++) { const b = ring[i]; ring[i] = (a + b) * 0.5; a = b; }
+  }
+
+  let idx = 0;
+  for (let i = 0; i < len; i++) {
+    const cur = ring[idx];
+    d[i] = cur;
+    ring[idx] = damp * 0.5 * (cur + ring[(idx + 1) % N]);
+    idx = (idx + 1) % N;
+  }
+  const f = Math.floor(sr * 0.1);
+  for (let i = len - f; i < len; i++) d[i] *= (len - i) / f;
+  return buf;
+}
+
+function renderBox(freq) {
+  const sr = ctx.sampleRate;
+  const dur = Math.min(2.4, 1.1 + 900 / freq);
+  const len = Math.floor(sr * dur);
+  const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+  const parts = [[1, 1, 0.75], [2, 0.34, 0.45], [3.01, 0.17, 0.28], [4.16, 0.08, 0.2], [5.43, 0.05, 0.14]];
+  for (const p of parts) {
+    const f = freq * p[0], tau = dur * p[2];
+    for (let i = 0; i < len; i++) {
+      d[i] += p[1] * Math.sin(2 * Math.PI * f * i / sr) * Math.exp(-i / (sr * tau));
+    }
+  }
+  for (let i = 0; i < len; i++) d[i] *= 0.5;
+  const f = Math.floor(sr * 0.06);
+  for (let i = len - f; i < len; i++) d[i] *= (len - i) / f;
+  return buf;
+}
+
+function playFreq(freq, when, vel, kind) {
+  ensureAudio();
+  const t = when || ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = getBuf(kind || settings.timbre, freq);
+  src.playbackRate.value = 1 + (Math.random() - 0.5) * 0.005;
+  const out = ctx.createGain();
+  out.gain.value = vel;
+  src.connect(out);
+  out.connect(busDry);
+  out.connect(send);
+  src.start(t);
+  return src;
+}
+
+function noteRC(row, col, when, velMul) {
+  playFreq(freqOf(row, col), when, ROWS[row].g * (velMul || 1));
+}
+
+/* ================= 输入：指针（多点触控 + 滑奏） ================= */
+const activePtr = new Map();
+
+plate.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.keycap');
+  if (!el) return;
+  e.preventDefault();
+  if (el.releasePointerCapture) {
+    try { el.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+  activePtr.set(e.pointerId, el);
+  notePress(el);
+});
+plate.addEventListener('pointermove', e => {
+  if (!activePtr.has(e.pointerId)) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const k = el && el.closest('.keycap');
+  const old = activePtr.get(e.pointerId);
+  if (k && k !== old) {
+    noteRelease(old);
+    activePtr.set(e.pointerId, k);
+    notePress(k);
+  }
+});
+function ptrEnd(e) {
+  const el = activePtr.get(e.pointerId);
+  if (el) { noteRelease(el); activePtr.delete(e.pointerId); }
+}
+window.addEventListener('pointerup', ptrEnd);
+window.addEventListener('pointercancel', ptrEnd);
+plate.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ================= 输入：键盘（同原神键位） ================= */
+const KEYMAP = {};
+ROWS.forEach((r, ri) => {
+  for (let ci = 0; ci < 7; ci++) KEYMAP[r.keys[ci]] = [ri, ci];
+});
+const pressedKB = new Set();
+
+window.addEventListener('keydown', e => {
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  const m = KEYMAP[e.key.toUpperCase()];
+  if (!m || pressedKB.has(e.key)) return;
+  pressedKB.add(e.key);
+  notePress(keyEls[m[0]][m[1]]);
+});
+window.addEventListener('keyup', e => {
+  const m = KEYMAP[e.key.toUpperCase()];
+  if (!m) return;
+  pressedKB.delete(e.key);
+  noteRelease(keyEls[m[0]][m[1]]);
+});
+window.addEventListener('blur', () => {
+  activePtr.forEach(el => noteRelease(el)); activePtr.clear();
+  pressedKB.forEach(k => {
+    const m = KEYMAP[k.toUpperCase()];
+    if (m) noteRelease(keyEls[m[0]][m[1]]);
+  });
+  pressedKB.clear();
+});
+
+/* ================= 跟弹模式（弹对自动推进） ================= */
+const followStrip = document.getElementById('followStrip');
+const followLane = document.getElementById('followLane');
+const followTitle = document.getElementById('followTitle');
+const followCount = document.getElementById('followCount');
+let follow = null; // { seq, idx, chips, done, missTimer }
+
+function buildChip(o, d) {
+  const chip = document.createElement('span');
+  chip.className = 'fchip';
+  const num = document.createElement('b');
+  num.className = 'fchip__num';
+  num.textContent = String(d); // d 为 1–7 的简谱度数
+  chip.appendChild(num);
+  if (o !== 0) {
+    const oct = document.createElement('i');
+    oct.className = 'fchip__oct ' + (o === 1 ? 'fchip__oct--hi' : 'fchip__oct--lo');
+    chip.appendChild(oct);
+  }
+  const key = document.createElement('span');
+  key.className = 'fchip__key';
+  key.textContent = ROWS[1 - o].keys[d - 1];
+  chip.appendChild(key);
+  return chip;
+}
+
+function startFollow(songKey) {
+  const song = SONGS[songKey];
+  if (!song) return;
+  if (follow && follow.missTimer) clearTimeout(follow.missTimer);
+  follow = { seq: song.seq, idx: 0, chips: [], done: false, missTimer: 0 };
+  followLane.innerHTML = '';
+  song.seq.forEach(pair => {
+    const chip = buildChip(pair[0], pair[1]);
+    followLane.appendChild(chip);
+    follow.chips.push(chip);
+  });
+  followTitle.textContent = '跟弹 · ' + song.name;
+  followStrip.hidden = false;
+  refreshFollow();
+}
+function stopFollow() {
+  if (follow && follow.missTimer) clearTimeout(follow.missTimer);
+  follow = null;
+  followStrip.hidden = true;
+  followLane.innerHTML = '';
+  followLane.style.transform = 'translateX(0)';
+}
+function refreshFollow() {
+  if (!follow) return;
+  follow.chips.forEach((chip, i) => {
+    chip.classList.toggle('is-cur', i === follow.idx);
+    chip.classList.toggle('is-done', i < follow.idx);
+    chip.classList.toggle('is-nxt', i === follow.idx + 1);
+  });
+  followCount.textContent = follow.done
+    ? '完成 ' + follow.seq.length + ' / ' + follow.seq.length
+    : follow.idx + ' / ' + follow.seq.length;
+  // 当前谱格保持在谱条约 30% 处；接近末端时钳制，不再右滑
+  const wrap = followLane.parentElement;
+  const cur = follow.chips[Math.min(follow.idx, follow.chips.length - 1)];
+  const x = cur.offsetLeft + cur.offsetWidth / 2;
+  const max = Math.max(0, followLane.offsetWidth - wrap.offsetWidth);
+  const tx = Math.max(-max, Math.min(0, wrap.offsetWidth * 0.3 - x));
+  followLane.style.transform = 'translateX(' + tx.toFixed(1) + 'px)';
+}
+function followCheck(row, col) {
+  if (!follow || follow.done) return;
+  const expected = follow.seq[follow.idx];
+  if (1 - expected[0] === row && expected[1] - 1 === col) {
+    follow.idx++;
+    follow.done = follow.idx >= follow.seq.length;
+    refreshFollow();
+  } else {
+    const cur = follow.chips[follow.idx];
+    cur.classList.add('is-miss');
+    if (follow.missTimer) clearTimeout(follow.missTimer);
+    follow.missTimer = setTimeout(() => cur.classList.remove('is-miss'), 260);
+  }
+}
+
+/* ================= 控件 ================= */
+const timbreSeg = document.getElementById('timbreSeg');
+const timbreEcho = document.getElementById('timbreEcho');
+const TIMBRE_NAME = { lyre: '竖琴', box: '八音盒' };
+Array.prototype.forEach.call(timbreSeg.querySelectorAll('button'), btn => {
+  btn.addEventListener('click', () => {
+    Array.prototype.forEach.call(timbreSeg.querySelectorAll('button'), b => {
+      b.removeAttribute('data-active');
+      b.setAttribute('aria-checked', 'false');
+    });
+    btn.setAttribute('data-active', 'true');
+    btn.setAttribute('aria-checked', 'true');
+    settings.timbre = btn.dataset.value;
+    timbreEcho.textContent = TIMBRE_NAME[settings.timbre];
+  });
+});
+
+function bindSwitch(id, key, onChange, echoEl) {
+  const sw = document.getElementById(id);
+  sw.addEventListener('click', () => {
+    const on = sw.dataset.on !== 'true';
+    sw.dataset.on = on ? 'true' : 'false';
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    if (echoEl) echoEl.textContent = on ? '开' : '关';
+    settings[key] = on;
+    onChange(on);
+  });
+}
+bindSwitch('swReverb', 'reverb', on => {
+  if (ctx) send.gain.setTargetAtTime(on ? 0.32 : 0, ctx.currentTime, 0.05);
+}, document.getElementById('echoReverb'));
+
+const vol = document.getElementById('vol');
+const volEcho = document.getElementById('volEcho');
+vol.addEventListener('input', () => {
+  settings.vol = vol.value / 100;
+  volEcho.textContent = vol.value + '%';
+  vol.setAttribute('aria-valuenow', vol.value);
+  if (ctx) masterGain.gain.setTargetAtTime(settings.vol, ctx.currentTime, 0.03);
+});
+
+/* ================= 跟弹曲目选择 ================= */
+const followPick = document.getElementById('followPick');
+Array.prototype.forEach.call(followPick.querySelectorAll('.pill'), pill => {
+  pill.addEventListener('click', () => {
+    Array.prototype.forEach.call(followPick.querySelectorAll('.pill'), p => p.removeAttribute('data-active'));
+    pill.setAttribute('data-active', 'true');
+    const song = pill.dataset.song;
+    if (song) startFollow(song); else stopFollow(); // 重新点选同一首 = 回到开头
+  });
+});
+
+/* ================= 示范演奏已按需求移除 ================= */
+</script>
+</body>
+</html>
